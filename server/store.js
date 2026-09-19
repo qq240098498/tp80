@@ -10,8 +10,11 @@ const MAX_VERSION_LENGTH = 40;
 const MAX_LICENSE_LENGTH = 40;
 const MAX_OWNER_LENGTH = 40;
 const MAX_NOTE_LENGTH = 200;
+const MAX_RANGE_NOTE_LENGTH = 200;
 const UNASSIGNED = '未指定';
 const STATUSES = ['在用', '待升', '已弃用'];
+// 区间写法的四种意思：不低于某版本 / 不高于某版本 / 两版本之间（两端含不含各自指定）/ 锁定某一段主版本号
+const RANGE_KINDS = ['atLeast', 'atMost', 'between', 'major'];
 
 // 初始数据：三个项目、十八条依赖登记。里面故意留了几种情况：
 // 同一个依赖在两个项目里版本不一致、几条没写责任人、一条没写许可、
@@ -42,6 +45,16 @@ function seedData() {
       { id: 'dep-2016', projectId: 'proj-1003', name: 'typescript', version: '5.2.2', license: 'Apache-2.0', owner: '王凯', status: '在用', note: '编译与类型检查', createdAt: '2026-08-28T04:10:00.000Z', updatedAt: '2026-09-08T07:40:00.000Z' },
       { id: 'dep-2017', projectId: 'proj-1003', name: 'vite', version: '5.0.10', license: 'MIT', owner: '王凯', status: '在用', note: '本地构建', createdAt: '2026-08-28T04:12:00.000Z', updatedAt: '2026-09-08T07:42:00.000Z' },
       { id: 'dep-2018', projectId: 'proj-1003', name: 'xml-parser', version: '0.9.2', license: 'GPL-3.0', owner: '', status: '在用', note: '解析对账文件用，许可需要复核', createdAt: '2026-09-01T02:00:00.000Z', updatedAt: '2026-09-08T07:50:00.000Z' },
+    ],
+    // 初始区间：四种写法各至少一条，其中支付网关的 spring-boot 与 bcpkix 两条故意落在区间外
+    ranges: [
+      { id: 'range-3001', depId: 'dep-2001', kind: 'major', lower: '', lowerInclusive: true, upper: '', upperInclusive: false, major: '2', note: 'Spring Boot 2.x 维护线，3.x 要等适配', createdAt: '2026-09-10T03:00:00.000Z', updatedAt: '2026-09-10T03:00:00.000Z' },
+      { id: 'range-3002', depId: 'dep-2006', kind: 'atLeast', lower: '2.7.0', lowerInclusive: true, upper: '', upperInclusive: false, major: '', note: '安全补丁只覆盖 2.7 起的版本，不能再停在 2.6', createdAt: '2026-09-10T03:05:00.000Z', updatedAt: '2026-09-10T03:05:00.000Z' },
+      { id: 'range-3003', depId: 'dep-2007', kind: 'between', lower: '4.1.0', lowerInclusive: true, upper: '4.1.100', upperInclusive: true, major: '', note: '跟着网关长连接基线走，两端都允许', createdAt: '2026-09-10T03:10:00.000Z', updatedAt: '2026-09-10T03:10:00.000Z' },
+      { id: 'range-3004', depId: 'dep-2008', kind: 'atLeast', lower: '1.72', lowerInclusive: true, upper: '', upperInclusive: false, major: '', note: '安全评估结论要求升到 1.72 或以上', createdAt: '2026-09-10T03:15:00.000Z', updatedAt: '2026-09-10T03:15:00.000Z' },
+      { id: 'range-3005', depId: 'dep-2011', kind: 'between', lower: '18.0.0', lowerInclusive: true, upper: '19.0.0', upperInclusive: false, major: '', note: '只走 React 18，19.0.0 正式版不放行', createdAt: '2026-09-10T03:20:00.000Z', updatedAt: '2026-09-10T03:20:00.000Z' },
+      { id: 'range-3006', depId: 'dep-2013', kind: 'atMost', lower: '', lowerInclusive: true, upper: '4.17.21', upperInclusive: true, major: '', note: '4.17.21 是最后一个补丁版本，不允许再高', createdAt: '2026-09-10T03:25:00.000Z', updatedAt: '2026-09-10T03:25:00.000Z' },
+      { id: 'range-3007', depId: 'dep-2016', kind: 'major', lower: '', lowerInclusive: true, upper: '', upperInclusive: false, major: '5', note: '编译工具链锁定在 5 系', createdAt: '2026-09-10T03:30:00.000Z', updatedAt: '2026-09-10T03:30:00.000Z' },
     ],
   };
 }
@@ -78,6 +91,37 @@ function normalizeDep(item, fallbackIndex) {
   };
 }
 
+// 区间端点要与页面口径一致：一到三段数字，可带预发布后缀
+const RANGE_BOUND_PATTERN = /^\d+(\.\d+){0,2}(-[0-9A-Za-z.]+)?$/;
+
+// 区间只保留认得出的字段；类型不认识、端点缺失或不合法、主版本号不是非负整数的一律丢掉
+function normalizeRange(item, fallbackIndex) {
+  const source = item && typeof item === 'object' ? item : {};
+  const kind = RANGE_KINDS.includes(source.kind) ? source.kind : '';
+  const major = String(source.major == null ? '' : source.major).trim();
+  const lower = typeof source.lower === 'string' ? source.lower.trim() : '';
+  const upper = typeof source.upper === 'string' ? source.upper.trim() : '';
+  if (!kind) return null;
+  if (kind === 'major' && !/^\d+$/.test(major)) return null;
+  if (kind === 'atLeast' && !RANGE_BOUND_PATTERN.test(lower)) return null;
+  if (kind === 'atMost' && !RANGE_BOUND_PATTERN.test(upper)) return null;
+  if (kind === 'between' && (!RANGE_BOUND_PATTERN.test(lower) || !RANGE_BOUND_PATTERN.test(upper))) return null;
+  const createdAt = typeof source.createdAt === 'string' && source.createdAt ? source.createdAt : new Date().toISOString();
+  return {
+    id: typeof source.id === 'string' && source.id ? source.id : `range-restored-${fallbackIndex + 1}`,
+    depId: typeof source.depId === 'string' ? source.depId.trim() : '',
+    kind,
+    lower,
+    lowerInclusive: source.lowerInclusive !== false,
+    upper,
+    upperInclusive: source.upperInclusive !== false,
+    major: kind === 'major' ? major : '',
+    note: typeof source.note === 'string' ? source.note : '',
+    createdAt,
+    updatedAt: typeof source.updatedAt === 'string' && source.updatedAt ? source.updatedAt : createdAt,
+  };
+}
+
 // 整份数据保证 projects 与 deps 结构一致，指向不存在项目的登记一律丢掉
 function normalize(raw) {
   const source = raw && typeof raw === 'object' ? raw : {};
@@ -106,7 +150,21 @@ function normalize(raw) {
         .filter((item) => known.has(item.projectId))
     : [];
 
-  return { projects: dedupedProjects, deps };
+  // 区间与登记一一对应：重复指向同一条登记的只留第一条，登记已删除的区间一并丢掉
+  const depIds = new Set(deps.map((item) => item.id));
+  const seedRanges = Array.isArray(source.ranges)
+    ? source.ranges
+    : (Array.isArray(seed.ranges) ? seed.ranges : []);
+  const rangedDeps = new Set();
+  const ranges = [];
+  seedRanges.forEach((item, index) => {
+    const range = normalizeRange(item, index);
+    if (!range || !range.id || !depIds.has(range.depId) || rangedDeps.has(range.depId)) return;
+    rangedDeps.add(range.depId);
+    ranges.push(range);
+  });
+
+  return { projects: dedupedProjects, deps, ranges };
 }
 
 // 读取数据文件：文件缺失或内容损坏时回落到初始数据并立刻补写
@@ -136,12 +194,15 @@ module.exports = {
   normalize,
   normalizeProject,
   normalizeDep,
+  normalizeRange,
   STATUSES,
+  RANGE_KINDS,
   UNASSIGNED,
   MAX_NAME_LENGTH,
   MAX_VERSION_LENGTH,
   MAX_LICENSE_LENGTH,
   MAX_OWNER_LENGTH,
   MAX_NOTE_LENGTH,
+  MAX_RANGE_NOTE_LENGTH,
   DATA_FILE,
 };

@@ -84,6 +84,27 @@ app.delete('/api/deps/:id', (req, res) => {
   }
 });
 
+// 版本区间：按登记一条一条设定，同一条登记重复保存即为改写
+app.get('/api/ranges', (_req, res) => {
+  res.json(api.listRanges());
+});
+
+app.put('/api/ranges', (req, res) => {
+  try {
+    res.json(api.putRange(req.body));
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+app.delete('/api/ranges/:id', (req, res) => {
+  try {
+    res.json(api.deleteRange(req.params.id));
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
 // 未匹配到的接口路径统一返回说明，避免前端拿到一串页面内容
 app.use('/api', (_req, res) => {
   res.status(404).json({ error: { code: 'API_NOT_FOUND', message: '接口不存在', field: '' } });

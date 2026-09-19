@@ -75,6 +75,7 @@
               <th>项目</th>
               <th>依赖名称</th>
               <th>版本</th>
+              <th>范围核查</th>
               <th>许可</th>
               <th>责任人</th>
               <th>状态</th>
@@ -108,6 +109,94 @@
         <div class="form-actions">
           <button type="submit">保存</button>
           <button type="button" id="dep-cancel" class="ghost">取消</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>版本区间设定</h2>
+        <div class="filters">
+          <button type="button" id="range-refresh" class="ghost">刷新</button>
+          <button type="button" id="range-new">为登记设定区间</button>
+        </div>
+      </div>
+      <p class="panel-tip">逐条给依赖登记写允许的版本范围：可以只设下限、只设上限、两端含不含分别指定的区间，或者锁定某一段主版本号；登记当前版本一超范围就在上一块标成超界</p>
+      <div class="table-wrap">
+        <table class="grid">
+          <thead>
+            <tr>
+              <th>项目</th>
+              <th>依赖登记</th>
+              <th>当前版本</th>
+              <th>允许范围</th>
+              <th>核查</th>
+              <th>说明</th>
+              <th>更新时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="range-body"></tbody>
+        </table>
+      </div>
+      <p class="empty-tip hidden" id="range-empty">还没有给任何登记设定允许范围</p>
+
+      <form class="dep-form hidden" id="range-form" autocomplete="off">
+        <h3 id="range-form-title">新增区间</h3>
+        <div class="form-row">
+          <label data-field="rangeDep">登记条目
+            <select id="range-dep"></select>
+          </label>
+          <label data-field="rangeKind">范围写法
+            <select id="range-kind">
+              <option value="atLeast">不低于某个版本</option>
+              <option value="atMost">不高于某个版本</option>
+              <option value="between">落在两个版本之间</option>
+              <option value="major">只允许某一段主版本号</option>
+            </select>
+          </label>
+        </div>
+        <div class="form-row range-fields" data-range-kind="atLeast">
+          <label data-field="rangeLower">下限版本<input id="range-lower" placeholder="例如 2.7.0，也支持 1.72" maxlength="40"></label>
+          <label data-field="rangeLowerInclusive">下端点
+            <select id="range-lower-inclusive">
+              <option value="true">包含（&ge; 下限）</option>
+              <option value="false">不包含（&gt; 下限）</option>
+            </select>
+          </label>
+        </div>
+        <div class="form-row range-fields hidden" data-range-kind="atMost">
+          <label data-field="rangeUpper">上限版本<input id="range-upper" placeholder="例如 4.17.21" maxlength="40"></label>
+          <label data-field="rangeUpperInclusive">上端点
+            <select id="range-upper-inclusive">
+              <option value="true">包含（&le; 上限）</option>
+              <option value="false">不包含（&lt; 上限）</option>
+            </select>
+          </label>
+        </div>
+        <div class="form-row range-fields hidden" data-range-kind="between">
+          <label data-field="rangeLower">下限版本<input id="range-between-lower" placeholder="例如 18.0.0" maxlength="40"></label>
+          <label data-field="rangeLowerInclusive">下端点
+            <select id="range-between-lower-inclusive">
+              <option value="true">包含（&ge;）</option>
+              <option value="false">不包含（&gt;）</option>
+            </select>
+          </label>
+          <label data-field="rangeUpper">上限版本<input id="range-between-upper" placeholder="例如 19.0.0" maxlength="40"></label>
+          <label data-field="rangeUpperInclusive">上端点
+            <select id="range-between-upper-inclusive">
+              <option value="true">包含（&le;）</option>
+              <option value="false">不包含（&lt;）</option>
+            </select>
+          </label>
+        </div>
+        <div class="form-row range-fields hidden" data-range-kind="major">
+          <label data-field="rangeMajor">主版本号<input id="range-major" placeholder="只填一个数字，例如 5 表示允许 5.x 全部" maxlength="10"></label>
+        </div>
+        <label class="full" data-field="rangeNote">说明<input id="range-note" placeholder="为什么这样划范围" maxlength="200"></label>
+        <div class="form-actions">
+          <button type="submit">保存区间</button>
+          <button type="button" id="range-cancel" class="ghost">取消</button>
         </div>
       </form>
     </section>

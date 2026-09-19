@@ -270,6 +270,16 @@ td.actions {
   color: var(--ink-soft);
 }
 
+.tag.range-ok {
+  background: #e7f6ee;
+  color: var(--ok);
+}
+
+.tag.range-bad {
+  background: #fde8e8;
+  color: var(--danger);
+}
+
 .empty-tip {
   margin: 12px 0 0;
   color: var(--ink-soft);
