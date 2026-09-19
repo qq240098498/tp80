@@ -2,11 +2,10 @@ const crypto = require('crypto');
 const { load, save, STATUSES, MAX_NAME_LENGTH, MAX_VERSION_LENGTH, MAX_LICENSE_LENGTH, MAX_OWNER_LENGTH, MAX_NOTE_LENGTH } = require('./store');
 const { ApiError, pickText } = require('./errors');
 const { findProject } = require('./projects');
+const { VERSION_PATTERN, validateRange, checkVersion, describeRange } = require('./versions');
 
 // 依赖名允许小写字母、数字、点、下划线、短横线，也允许带范围的写法
 const NAME_PATTERN = /^[@a-z0-9][@a-z0-9._/-]*$/;
-// 版本写法固定成三段数字，后面可选择带一段预发布后缀
-const VERSION_PATTERN = /^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/;
 
 function validateName(value) {
   const name = pickText(value);
@@ -82,6 +81,15 @@ function sortDeps(list) {
   });
 }
 
+// 给登记补上区间的文字写法与判定结果，页面直接拿来显示，不用自己再算一遍
+function withRangeInfo(item) {
+  return {
+    ...item,
+    rangeText: describeRange(item.range),
+    rangeCheck: checkVersion(item.version, item.range),
+  };
+}
+
 // 依赖清单：支持按项目、状态、许可筛选，再按依赖名或责任人搜索
 function listDeps(options) {
   const input = options && typeof options === 'object' ? options : {};
@@ -106,14 +114,14 @@ function listDeps(options) {
     .map((item) => ({ id: item.id, name: item.name, owner: item.owner }))
     .sort((a, b) => (a.name < b.name ? -1 : 1));
 
-  return { deps: sortDeps(list), projects, licenses, statuses: STATUSES.slice() };
+  return { deps: sortDeps(list).map(withRangeInfo), projects, licenses, statuses: STATUSES.slice() };
 }
 
 function getDep(id) {
   const data = load();
   const found = data.deps.find((item) => item.id === id);
   if (!found) throw new ApiError(404, 'DEP_NOT_FOUND', '这条依赖登记不存在或已被删除', '');
-  return found;
+  return withRangeInfo(found);
 }
 
 function createDep(payload) {
@@ -173,12 +181,35 @@ function deleteDep(id) {
   return { id: removed.id, name: removed.name };
 }
 
+// 给单条登记设定允许的版本区间，区间写法的四种类型在 versions.js 里统一校验
+function setDepRange(id, payload) {
+  const data = load();
+  const found = data.deps.find((item) => item.id === id);
+  if (!found) throw new ApiError(404, 'DEP_NOT_FOUND', '这条依赖登记不存在或已被删除', '');
+  found.range = validateRange(payload);
+  found.updatedAt = new Date().toISOString();
+  save(data);
+  return withRangeInfo(found);
+}
+
+function clearDepRange(id) {
+  const data = load();
+  const found = data.deps.find((item) => item.id === id);
+  if (!found) throw new ApiError(404, 'DEP_NOT_FOUND', '这条依赖登记不存在或已被删除', '');
+  found.range = null;
+  found.updatedAt = new Date().toISOString();
+  save(data);
+  return withRangeInfo(found);
+}
+
 module.exports = {
   listDeps,
   getDep,
   createDep,
   updateDep,
   deleteDep,
+  setDepRange,
+  clearDepRange,
   validateName,
   validateVersion,
 };

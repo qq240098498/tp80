@@ -75,6 +75,7 @@
               <th>项目</th>
               <th>依赖名称</th>
               <th>版本</th>
+              <th>区间判定</th>
               <th>许可</th>
               <th>责任人</th>
               <th>状态</th>
@@ -108,6 +109,58 @@
         <div class="form-actions">
           <button type="submit">保存</button>
           <button type="button" id="dep-cancel" class="ghost">取消</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>版本区间</h2>
+        <div class="panel-tip">≥ ≤ 表示含端点；[ ] 表示含、( ) 表示不含；2.x 表示主版本号 2 里的版本都可以；当前版本落在区间外会标红</div>
+      </div>
+      <div class="table-wrap">
+        <table class="grid">
+          <thead>
+            <tr>
+              <th>项目</th>
+              <th>依赖名称</th>
+              <th>当前版本</th>
+              <th>允许区间</th>
+              <th>判定</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="range-body"></tbody>
+        </table>
+      </div>
+      <p class="empty-tip hidden" id="range-empty">当前筛选条件下没有依赖登记</p>
+
+      <form class="dep-form hidden" id="range-form" autocomplete="off">
+        <h3 id="range-form-title">设定区间</h3>
+        <div class="form-row">
+          <label data-field="rangeKind">区间类型
+            <select id="range-kind">
+              <option value="min">不低于某个版本</option>
+              <option value="max">不高于某个版本</option>
+              <option value="between">介于两个版本之间</option>
+              <option value="major">同一主版本号</option>
+            </select>
+          </label>
+        </div>
+        <div class="form-row" data-range-params="min between">
+          <label data-field="rangeMin"><span id="range-min-label">最低版本（含这个版本）</span><input id="range-min" placeholder="例如 2.7.0" maxlength="40"></label>
+          <label class="check hidden" id="range-min-inclusive-wrap"><input type="checkbox" id="range-min-inclusive" checked>含下限</label>
+        </div>
+        <div class="form-row" data-range-params="max between">
+          <label data-field="rangeMax"><span id="range-max-label">最高版本（含这个版本）</span><input id="range-max" placeholder="例如 3.0.0" maxlength="40"></label>
+          <label class="check hidden" id="range-max-inclusive-wrap"><input type="checkbox" id="range-max-inclusive" checked>含上限</label>
+        </div>
+        <div class="form-row hidden" data-range-params="major">
+          <label data-field="rangeMajor">主版本号<input id="range-major" placeholder="例如 2" maxlength="10"></label>
+        </div>
+        <div class="form-actions">
+          <button type="submit">保存区间</button>
+          <button type="button" id="range-cancel" class="ghost">取消</button>
         </div>
       </form>
     </section>

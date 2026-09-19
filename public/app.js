@@ -6,6 +6,7 @@ const state = {
   licenses: [],
   statuses: [],
   editingId: '',
+  rangeEditingId: '',
 };
 
 const el = (id) => document.getElementById(id);
@@ -120,6 +121,7 @@ async function loadDeps() {
   state.statuses = payload.statuses || [];
   renderDepFilterOptions();
   renderDeps();
+  renderRanges();
 }
 
 function renderProjects() {
@@ -180,6 +182,15 @@ function projectName(projectId) {
   return found ? found.name : projectId;
 }
 
+// 区间判定标签：设了区间的按结果显示，版本写法不规范的说明无法判定，没设的显示未设定
+function rangeCheckTag(item) {
+  if (!item.range) return '<span class="missing">未设定</span>';
+  const text = escapeHtml(item.rangeText);
+  if (item.rangeCheck === true) return `<span class="tag ok" title="${text}">在范围内</span>`;
+  if (item.rangeCheck === false) return `<span class="tag bad" title="${text}">超出范围</span>`;
+  return `<span class="tag off" title="${text}：版本写法不规范，无法判定">无法判定</span>`;
+}
+
 function renderDeps() {
   const body = el('dep-body');
   body.innerHTML = state.deps.map((item) => {
@@ -188,6 +199,7 @@ function renderDeps() {
       <td>${escapeHtml(projectName(item.projectId))}</td>
       <td class="mono">${escapeHtml(item.name)}</td>
       <td class="mono">${escapeHtml(item.version)}</td>
+      <td>${rangeCheckTag(item)}</td>
       <td>${item.license ? escapeHtml(item.license) : '<span class="missing">未填</span>'}</td>
       <td>${item.owner ? escapeHtml(item.owner) : '<span class="missing">未指定</span>'}</td>
       <td><span class="tag ${statusTag}">${escapeHtml(item.status)}</span></td>
@@ -200,6 +212,57 @@ function renderDeps() {
     </tr>`;
   }).join('');
   el('dep-empty').classList.toggle('hidden', state.deps.length > 0);
+}
+
+// 区间设定区与依赖登记共用一份筛选结果，登记列表里看到哪些，这里就能给哪些设区间
+function renderRanges() {
+  const body = el('range-body');
+  body.innerHTML = state.deps.map((item) => `<tr>
+      <td>${escapeHtml(projectName(item.projectId))}</td>
+      <td class="mono">${escapeHtml(item.name)}</td>
+      <td class="mono">${escapeHtml(item.version)}</td>
+      <td class="mono">${item.range ? escapeHtml(item.rangeText) : '<span class="missing">未设定</span>'}</td>
+      <td>${rangeCheckTag(item)}</td>
+      <td class="actions">
+        <button type="button" class="link" data-range-edit="${escapeHtml(item.id)}">${item.range ? '修改区间' : '设定区间'}</button>
+        ${item.range ? `<button type="button" class="link danger" data-range-clear="${escapeHtml(item.id)}">清除</button>` : ''}
+      </td>
+    </tr>`).join('');
+  el('range-empty').classList.toggle('hidden', state.deps.length > 0);
+}
+
+// 区间表单的参数区随类型切换：介于两版本之间时两端各带一个含不含的勾选
+function syncRangeParams() {
+  const kind = el('range-kind').value;
+  document.querySelectorAll('[data-range-params]').forEach((row) => {
+    row.classList.toggle('hidden', !row.dataset.rangeParams.split(' ').includes(kind));
+  });
+  const between = kind === 'between';
+  el('range-min-inclusive-wrap').classList.toggle('hidden', !between);
+  el('range-max-inclusive-wrap').classList.toggle('hidden', !between);
+  el('range-min-label').textContent = between ? '下限版本' : '最低版本（含这个版本）';
+  el('range-max-label').textContent = between ? '上限版本' : '最高版本（含这个版本）';
+}
+
+function openRangeForm(dep) {
+  state.rangeEditingId = dep.id;
+  el('range-form-title').textContent = `设定区间：${dep.name}（当前版本 ${dep.version}）`;
+  const range = dep.range || {};
+  el('range-kind').value = range.kind || 'min';
+  el('range-min').value = range.min || '';
+  el('range-max').value = range.max || '';
+  el('range-major').value = range.kind === 'major' ? String(range.major) : '';
+  el('range-min-inclusive').checked = range.minInclusive !== false;
+  el('range-max-inclusive').checked = range.maxInclusive !== false;
+  syncRangeParams();
+  el('range-form').classList.remove('hidden');
+  el('range-kind').focus();
+}
+
+function closeRangeForm() {
+  state.rangeEditingId = '';
+  el('range-form').classList.add('hidden');
+  clearFieldMarks();
 }
 
 function openDepForm(dep) {
@@ -278,6 +341,30 @@ async function submitDep(event) {
   }
 }
 
+async function submitRange(event) {
+  event.preventDefault();
+  clearNotice();
+  clearFieldMarks();
+  const kind = el('range-kind').value;
+  const payload = { kind };
+  if (kind === 'min' || kind === 'between') payload.min = el('range-min').value;
+  if (kind === 'max' || kind === 'between') payload.max = el('range-max').value;
+  if (kind === 'between') {
+    payload.minInclusive = el('range-min-inclusive').checked;
+    payload.maxInclusive = el('range-max-inclusive').checked;
+  }
+  if (kind === 'major') payload.major = el('range-major').value;
+  try {
+    await request(`/api/deps/${encodeURIComponent(state.rangeEditingId)}/range`, { method: 'PUT', body: JSON.stringify(payload) });
+    notify('版本区间已保存', 'ok');
+    closeRangeForm();
+    await loadDeps();
+  } catch (err) {
+    notify(err.message, 'error');
+    markField(err.field);
+  }
+}
+
 // 列表上的操作用事件委托统一处理，列表重绘之后不需要重新绑定
 document.addEventListener('click', async (event) => {
   const node = event.target.closest('button');
@@ -326,8 +413,31 @@ document.addEventListener('click', async (event) => {
     try {
       await request(`/api/deps/${encodeURIComponent(node.dataset.depDelete)}`, { method: 'DELETE' });
       if (state.editingId === node.dataset.depDelete) closeDepForm();
+      if (state.rangeEditingId === node.dataset.depDelete) closeRangeForm();
       notify('登记已删除', 'ok');
       await loadProjects();
+      await loadDeps();
+    } catch (err) {
+      notify(err.message, 'error');
+    }
+    return;
+  }
+
+  if (node.dataset.rangeEdit) {
+    clearNotice();
+    const found = state.deps.find((item) => item.id === node.dataset.rangeEdit);
+    if (found) openRangeForm(found);
+    return;
+  }
+
+  if (node.dataset.rangeClear) {
+    clearNotice();
+    const found = state.deps.find((item) => item.id === node.dataset.rangeClear);
+    if (!window.confirm(`确定清除 ${found ? found.name : ''} 的区间设定吗？`)) return;
+    try {
+      await request(`/api/deps/${encodeURIComponent(node.dataset.rangeClear)}/range`, { method: 'DELETE' });
+      if (state.rangeEditingId === node.dataset.rangeClear) closeRangeForm();
+      notify('区间设定已清除', 'ok');
       await loadDeps();
     } catch (err) {
       notify(err.message, 'error');
@@ -337,6 +447,9 @@ document.addEventListener('click', async (event) => {
 
 el('project-form').addEventListener('submit', submitProject);
 el('dep-form').addEventListener('submit', submitDep);
+el('range-form').addEventListener('submit', submitRange);
+el('range-cancel').addEventListener('click', closeRangeForm);
+el('range-kind').addEventListener('change', syncRangeParams);
 el('dep-new').addEventListener('click', () => {
   clearNotice();
   if (!state.projects.length) {
